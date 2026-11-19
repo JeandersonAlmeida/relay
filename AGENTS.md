@@ -1,9 +1,135 @@
+# Relay — project instructions
+
+Relay is a webhook gateway (Elixir/Phoenix). It receives events from external sources,
+rejects invalid and duplicate ones, stores them, and delivers them to destinations with
+retries. The generic Phoenix, Elixir, Ecto and LiveView guidelines are in the generated
+block below; this section only covers what is specific to Relay and the exceptions to
+the generic text.
+
+## Commands
+
+```
+mix setup                                     # deps, database create and migrate
+mix precommit                                 # run when you finish; fix everything it reports
+mix test                                      # tests
+mix coveralls                                 # tests with coverage
+mix credo --strict                            # lint (must also be part of precommit)
+mix ecto.rollback --all && mix ecto.migrate   # migrations must go down and up cleanly
+```
+
+A task is done only when `mix precommit` (which must include `mix credo --strict`) passes.
+
+## Domain
+
+- **Source**: system that sends webhooks (unique token, signing secret).
+- **Destination**: URL where the events of a source are delivered.
+- **Event**: one received webhook, identified by `(source_id, external_id)`.
+- **DeliveryAttempt**: one attempt to deliver an event to a destination.
+- **Event status**: `received`, `delivered`, `failed` (will retry), `dead` (gave up).
+
+## Where to read before you start
+
+- `docs/agent-workflow.md`: the shared Spec-Driven Development workflow, lifecycle,
+  readiness, completion, and traceability rules.
+- `docs/specs/`: normative specifications. Always read the relevant specification
+  before editing code. Specifications use the `spec-<purpose>-<subject>.md` naming
+  convention and contain the goal, scope, requirements, acceptance criteria, and
+  validation strategy.
+- `docs/templates/`: templates for new feature specifications and implementation plans.
+- `docs/plans/`: implementation plans for approved specifications. Read the relevant
+  plan before editing when one exists; create one there for work with more than one
+  meaningful implementation or validation step.
+- `docs/architecture/`: architecture overviews, data models, contracts, and testing
+  architecture. Read the documents related to the task; create or update them when
+  the corresponding architecture changes.
+- `docs/adr/`: past architectural decisions, one per file (`NNNN-short-title.md`).
+
+If there is no spec for what you were asked to do, say so and propose one. Do not invent scope.
+
+## Skills
+
+- Before implementation, identify whether an available skill applies to the task.
+- When a skill applies, read its `SKILL.md` completely before taking task actions and follow its required workflow and validation steps.
+- Record the selected skill and any skill-specific validation in the implementation plan when a plan exists.
+- Skills provide specialized execution guidance; they do not replace the specification, this file, project guidelines, tests, or `mix precommit`.
+- Do not use a skill to expand the task scope. User intent, repository rules, and approved specifications define what may be changed.
+
+## Workflow
+
+1. Read this file, `docs/agent-workflow.md`, the relevant specification, and the related
+   architecture documents before editing.
+2. Identify and read any applicable skill before editing. Follow the skill's required
+   workflow, assets, tools, and validation steps.
+3. If no specification exists, stop and propose one using the template in
+   `docs/templates/feature-spec.md`; do not invent scope.
+4. For work with more than one meaningful implementation or validation step, create an
+   implementation plan in `docs/plans/` using `docs/templates/implementation-plan.md`.
+5. Implement one planned task at a time and record its requirement and validation.
+6. Write tests together with the code.
+7. Run skill-specific validation and `mix precommit`; fix every failure before reporting.
+8. For an architectural decision (library, trade-off, data-model choice), propose an ADR.
+9. If behavior or the data model changes, update the matching file in `docs/architecture/`.
+10. Follow `docs/agent-workflow.md` for the shared lifecycle and traceability process. The
+   Relay-specific rules in this file take precedence if there is a conflict.
+11. Do not refactor outside the scope of the task. Do not commit, push or open pull
+   requests unless asked. Commit style: Conventional Commits.
+
+## Relay rules
+
+- **Idempotency is enforced by the database**: unique index on `events (source_id, external_id)`
+  plus `ON CONFLICT DO NOTHING`. Never check for duplicates with a `SELECT` before the `INSERT`.
+- Enqueue the delivery job in the **same transaction** as the event insert (`Ecto.Multi`).
+  Broadcast over PubSub only **after** the transaction commits.
+- `status` and `received_at` of an event are set in the context, never through `cast`.
+- Migrations must be reversible. Use `mix ecto.gen.migration`.
+- Secrets (`signing_secret`, destination `secret`) are never logged, returned by an API,
+  or committed. Mark them with `redact: true`.
+- Webhook signatures: HMAC-SHA256 over the raw body, `Plug.Crypto.secure_compare/2`,
+  and reject old timestamps. Headers use the `x-relay-` prefix (`x-relay-timestamp`,
+  `x-relay-signature`, `x-relay-event-id`). The contract belongs in the relevant
+  document under `docs/architecture/`; if code and docs disagree, ask.
+- The dashboard is protected with HTTP Basic Auth (`Plug.BasicAuth`), not `phx.gen.auth`.
+  Do not create `live_session` or `current_scope` workarounds for it.
+- HTTP calls use `Req` behind a behaviour, so tests can mock them with Mox. Tests never
+  call the real network. Oban, Mox, Credo and ExCoveralls are pre-approved; ask before
+  adding any other dependency.
+
+## Exceptions to the generic guidelines below
+
+- To show the newest item first in a stream, use `stream_insert(socket, :events, event, at: 0)`.
+  The default `at: -1` appends. Do not rely on the generic note about prepending.
+- In LiveView tests, assert on element IDs with `has_element?/2` and `element/2`. Do not
+  assert on raw HTML text.
+- One module per file, including behaviours and their implementations.
+
+## Testing specifics
+
+- Tests with concurrent database work or LiveView use `async: false`; the rest use `async: true`.
+- Reusable test data goes in `test/support`. Do not add a factory library.
+- Cover business rules and edge cases (invalid input, duplicates, failures), not framework behavior.
+
+## When you finish
+
+Reply with: a short summary of what changed and why; the files you created or changed;
+the commands you ran and their results; decisions made and anything left out of scope;
+risks, open questions or follow-ups. If something is ambiguous or conflicts with these
+rules, ask before guessing.
+
+
 This is a web application written using the Phoenix web framework.
 
 ## Project guidelines
 
 - Use `mix precommit` alias when you are done with all changes and fix any pending issues
 - Use the already included and available `:req` (`Req`) library for HTTP requests, **avoid** `:httpoison`, `:tesla`, and `:httpc`. Req is included by default and is the preferred HTTP client for Phoenix apps
+
+## Code guidelines (read BEFORE editing the related code)
+- Elixir and Mix: docs/guidelines/elixir.md
+- Tests: docs/guidelines/test.md
+- Ecto schemas, changesets, migrations: docs/guidelines/ecto.md
+- Phoenix, HEEx, and LiveView (streams, forms, hooks): docs/guidelines/phoenix.md
+- Tailwind, JS, and CSS: docs/guidelines/JS_CSS.md
+- UI and UX: docs/guidelines/UI_UX.md
 
 ### Phoenix v1.8 guidelines
 
