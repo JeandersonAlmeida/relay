@@ -1,0 +1,19 @@
+{
+  "skip_files": [
+    "lib/relay.ex",
+    "lib/relay/application.ex",
+    "lib/relay/mailer.ex",
+    "lib/relay/repo.ex",
+    "lib/relay_web.ex",
+    "lib/relay_web/components/core_components.ex",
+    "lib/relay_web/components/layouts.ex",
+    "lib/relay_web/endpoint.ex",
+    "lib/relay_web/gettext.ex",
+    "lib/relay_web/router.ex",
+    "lib/relay_web/telemetry.ex",
+    "test"
+  ],
+  "coverage_options": {
+    "minimum_coverage": 100
+  }
+}
